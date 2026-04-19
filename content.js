@@ -8,6 +8,8 @@
   let startX, startWidth, startHeight;
   let startPageY;
   let geminiObserver = null;
+  let isFullscreen = false;
+  let fullscreenPollId = null;
 
   // Default settings
   const DEFAULTS = {
@@ -567,8 +569,101 @@
     });
   }
 
+  // ── Fullscreen detection ────────────────────────────────────────────
+  function checkFullscreen() {
+    // Detect via native Fullscreen API
+    if (document.fullscreenElement) return true;
+    // Detect via YouTube's player fullscreen class
+    const player = document.querySelector('.html5-video-player');
+    if (player && player.classList.contains('ytp-fullscreen')) return true;
+    return false;
+  }
+
+  /** Tear down every modification the extension has made. */
+  function disableExtension() {
+    console.log('YouTube Gemini Resizer: Disabling (fullscreen mode)');
+
+    if (geminiContainer) {
+      // Remove resize handles
+      geminiContainer.querySelectorAll('.gemini-resize-handle').forEach(h => h.remove());
+      // Remove text size controls
+      geminiContainer.querySelectorAll('.gemini-text-controls').forEach(c => c.remove());
+      // Remove the active marker class and undo inline styles we injected
+      geminiContainer.classList.remove('gemini-resizer-active');
+      geminiContainer.style.opacity = '';
+      geminiContainer.style.visibility = '';
+      geminiContainer.style.zIndex = '';
+      geminiContainer.style.position = '';
+      geminiContainer.style.width = '';
+      geminiContainer.style.minWidth = '';
+      geminiContainer.style.flex = '';
+      geminiContainer.style.height = '';
+      geminiContainer.style.minHeight = '';
+      geminiContainer.style.maxHeight = '';
+      geminiContainer.style.userSelect = '';
+    }
+
+    // Undo layout tweaks on #secondary and #primary
+    const secondary = document.querySelector('#secondary');
+    if (secondary) {
+      secondary.style.width = '';
+      secondary.style.minWidth = '';
+      secondary.style.flex = '';
+    }
+    const primary = document.querySelector('#primary');
+    if (primary) {
+      primary.style.maxWidth = '';
+      primary.style.flex = '';
+      primary.style.minWidth = '';
+    }
+    const panels = document.querySelector('#panels');
+    if (panels) {
+      panels.style.width = '';
+    }
+
+    // Remove injected copy buttons
+    document.querySelectorAll('.gemini-response-actions').forEach(el => el.remove());
+    document.querySelectorAll('[data-gemini-copy-injected]').forEach(el => {
+      delete el.dataset.geminiCopyInjected;
+    });
+
+    // Remove injected font-size style tag
+    const fontStyle = document.getElementById('gemini-font-size-style');
+    if (fontStyle) fontStyle.remove();
+
+    // Disconnect mutation observer while disabled
+    if (geminiObserver) {
+      geminiObserver.disconnect();
+    }
+
+    // Reset container reference so it gets re-detected on re-enable
+    geminiContainer = null;
+  }
+
+  /** Re-enable after leaving fullscreen. */
+  function enableExtension() {
+    console.log('YouTube Gemini Resizer: Re-enabling (exited fullscreen)');
+    // Re-start the observer + initialization cycle
+    startObserving();
+  }
+
+  function onFullscreenChange() {
+    const nowFullscreen = checkFullscreen();
+    if (nowFullscreen === isFullscreen) return;
+    isFullscreen = nowFullscreen;
+
+    if (isFullscreen) {
+      disableExtension();
+    } else {
+      enableExtension();
+    }
+  }
+
   // Initialize resizer
   async function initializeResizer() {
+    // Skip if currently in fullscreen
+    if (isFullscreen) return;
+
     geminiContainer = findGeminiContainer();
 
     if (geminiContainer && !geminiContainer.classList.contains('gemini-resizer-active')) {
@@ -637,6 +732,7 @@
 
     // Set up mutation observer
     geminiObserver = new MutationObserver((mutations) => {
+      if (isFullscreen) return; // Skip while fullscreen
       // Check if Gemini container appeared
       if (!geminiContainer || !document.contains(geminiContainer)) {
         initializeResizer();
@@ -651,6 +747,16 @@
     });
   }
 
+  // ── Fullscreen event listeners ────────────────────────────────────
+  document.addEventListener('fullscreenchange', onFullscreenChange);
+  document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+  // YouTube may toggle fullscreen via its player without using the native
+  // Fullscreen API, so poll for the `.ytp-fullscreen` class as a fallback.
+  fullscreenPollId = setInterval(() => {
+    onFullscreenChange();
+  }, 500);
+
   // Start when DOM is ready
   if (document.readyState === 'loading') {
     document.addEventListener('DOMContentLoaded', startObserving);
@@ -660,6 +766,7 @@
 
   // Also check periodically for the container
   setInterval(() => {
+    if (isFullscreen) return; // Skip while fullscreen
     if (!geminiContainer || !document.contains(geminiContainer)) {
       initializeResizer();
     }
