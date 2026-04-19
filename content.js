@@ -457,9 +457,11 @@
   }
 
   function getResponseTurns() {
-    if (!geminiContainer) return [];
+    // When geminiContainer is null (e.g. during fullscreen), fall back to
+    // searching the whole document so copy buttons still get injected.
+    const root = geminiContainer || document;
 
-    return Array.from(geminiContainer.querySelectorAll(RESPONSE_SELECTOR)).filter((turn) => {
+    return Array.from(root.querySelectorAll(RESPONSE_SELECTOR)).filter((turn) => {
       if (!isLikelyResponseTurn(turn)) return false;
       return turn.closest(RESPONSE_SELECTOR) === turn;
     });
@@ -621,20 +623,14 @@
       panels.style.width = '';
     }
 
-    // Remove injected copy buttons
-    document.querySelectorAll('.gemini-response-actions').forEach(el => el.remove());
-    document.querySelectorAll('[data-gemini-copy-injected]').forEach(el => {
-      delete el.dataset.geminiCopyInjected;
-    });
-
     // Remove injected font-size style tag
     const fontStyle = document.getElementById('gemini-font-size-style');
     if (fontStyle) fontStyle.remove();
 
-    // Disconnect mutation observer while disabled
-    if (geminiObserver) {
-      geminiObserver.disconnect();
-    }
+    // NOTE: Copy buttons are intentionally kept in fullscreen so the user
+    // can still copy AI responses while watching the video.
+    // The mutation observer also stays connected so new copy buttons are
+    // injected for streamed responses (see MutationObserver below).
 
     // Reset container reference so it gets re-detected on re-enable
     geminiContainer = null;
@@ -806,7 +802,10 @@
 
     // Set up mutation observer
     geminiObserver = new MutationObserver((mutations) => {
-      if (isFullscreen) return; // Skip while fullscreen
+      // Always inject copy buttons — even in fullscreen
+      scheduleCopyButtonInjection();
+
+      if (isFullscreen) return; // Skip resize/layout logic while fullscreen
 
       // If we had a container but it's gone or hidden, clean up
       if (geminiContainer && !isGeminiPanelVisible()) {
@@ -818,8 +817,6 @@
       if (!geminiContainer || !document.contains(geminiContainer)) {
         initializeResizer();
       }
-      // Inject copy buttons on any DOM change inside the Gemini panel
-      scheduleCopyButtonInjection();
     });
 
     geminiObserver.observe(document.body, {
@@ -847,7 +844,10 @@
 
   // Also check periodically for the container
   setInterval(() => {
-    if (isFullscreen) return; // Skip while fullscreen
+    // Always inject copy buttons — even in fullscreen
+    scheduleCopyButtonInjection();
+
+    if (isFullscreen) return; // Skip resize/layout logic while fullscreen
 
     // If we had a container but it's gone or hidden, clean up
     if (geminiContainer && !isGeminiPanelVisible()) {
@@ -858,8 +858,6 @@
     if (!geminiContainer || !document.contains(geminiContainer)) {
       initializeResizer();
     }
-    // Periodically inject copy buttons for newly-streamed responses
-    scheduleCopyButtonInjection();
   }, 1000);
 
   console.log('YouTube Gemini Resizer: Extension loaded');
