@@ -1,4 +1,4 @@
-# YouTube Gemini Resizer
+# Better Gemini for YouTube
 
 A Chrome extension that allows you to resize the Gemini AI window and text on YouTube.
 
