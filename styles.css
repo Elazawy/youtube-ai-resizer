@@ -166,7 +166,7 @@
 .gemini-resizer-active {
   min-width: 300px !important;
   min-height: 200px !important;
-  max-width: none !important;
+  max-width: 100vw !important;
   max-height: none !important;
   resize: none !important;
   /* Don't force overflow, let YouTube handle it */

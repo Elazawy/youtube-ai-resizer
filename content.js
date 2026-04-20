@@ -192,7 +192,10 @@
   function applyContainerWidth(width) {
     if (!geminiContainer) return;
 
-    const newWidth = Math.max(MIN_WIDTH, Math.round(width));
+    // Prevent the container from being wider than the screen minus a reasonable video player width
+    const maxAllowedWidth = Math.max(MIN_WIDTH, window.innerWidth - 350);
+    const newWidth = Math.min(Math.max(MIN_WIDTH, Math.round(width)), maxAllowedWidth);
+
     geminiContainer.style.width = `${newWidth}px`;
     geminiContainer.style.minWidth = `${newWidth}px`;
     geminiContainer.style.flex = `0 0 ${newWidth}px`;
@@ -828,6 +831,18 @@
   // ── Fullscreen event listeners ────────────────────────────────────
   document.addEventListener('fullscreenchange', onFullscreenChange);
   document.addEventListener('webkitfullscreenchange', onFullscreenChange);
+
+  // Handle window resize to prevent container from overflowing screen
+  let windowResizeTimer = null;
+  window.addEventListener('resize', () => {
+    if (isFullscreen) return;
+    clearTimeout(windowResizeTimer);
+    windowResizeTimer = setTimeout(() => {
+      if (geminiContainer && isGeminiPanelVisible()) {
+        applySettings();
+      }
+    }, 100);
+  });
 
   // YouTube may toggle fullscreen via its player without using the native
   // Fullscreen API, so poll for the `.ytp-fullscreen` class as a fallback.
